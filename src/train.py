@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 import argparse
-from typing import Dict, List
+from typing import Dict, List, Any
 import pickle
 
 from data_utils import DataPreprocessor, create_cross_validation_splits, prepare_fold_data
@@ -18,6 +18,129 @@ def load_config(config_path: str) -> Dict:
     """Load configuration from YAML file."""
     with open(config_path, 'r') as file:
         config = yaml.safe_load(file)
+    return config
+
+
+def parse_config_override(override_str: str) -> tuple:
+    """
+    Parse a config override string in the format 'key.subkey=value'.
+    
+    Args:
+        override_str: String in format 'key.subkey=value' or 'key=value'
+        
+    Returns:
+        tuple: (key_path_list, value)
+        
+    Examples:
+        'training.learning_rate=0.001' -> (['training', 'learning_rate'], 0.001)
+        'model.name=CNN1D' -> (['model', 'name'], 'CNN1D')
+        'training.batch_size=64' -> (['training', 'batch_size'], 64)
+    """
+    if '=' not in override_str:
+        raise ValueError(f"Invalid override format: {override_str}. Expected 'key=value' or 'key.subkey=value'")
+    
+    key_path, value_str = override_str.split('=', 1)
+    key_list = key_path.split('.')
+    
+    # Try to convert value to appropriate type
+    value = convert_string_to_type(value_str)
+    
+    return key_list, value
+
+
+def convert_string_to_type(value_str: str) -> Any:
+    """
+    Convert string value to appropriate Python type.
+    
+    Args:
+        value_str: String representation of the value
+        
+    Returns:
+        Converted value with appropriate type
+    """
+    # Handle boolean values
+    if value_str.lower() in ['true', 'false']:
+        return value_str.lower() == 'true'
+    
+    # Handle None/null values
+    if value_str.lower() in ['none', 'null']:
+        return None
+    
+    # Try to convert to int
+    try:
+        if '.' not in value_str:
+            return int(value_str)
+    except ValueError:
+        pass
+    
+    # Try to convert to float
+    try:
+        return float(value_str)
+    except ValueError:
+        pass
+    
+    # Handle lists (comma-separated values in brackets)
+    if value_str.startswith('[') and value_str.endswith(']'):
+        list_str = value_str[1:-1].strip()
+        if not list_str:
+            return []
+        items = [convert_string_to_type(item.strip()) for item in list_str.split(',')]
+        return items
+    
+    # Return as string if no other type matches
+    return value_str
+
+
+def update_nested_dict(config: Dict, key_path: List[str], value: Any) -> None:
+    """
+    Update a nested dictionary with a value at the specified key path.
+    
+    Args:
+        config: The configuration dictionary to update
+        key_path: List of keys representing the path to the value
+        value: The new value to set
+        
+    Examples:
+        update_nested_dict(config, ['training', 'learning_rate'], 0.001)
+        update_nested_dict(config, ['model', 'name'], 'CNN1D')
+    """
+    current = config
+    
+    # Navigate to the parent of the target key
+    for key in key_path[:-1]:
+        if key not in current:
+            current[key] = {}
+        elif not isinstance(current[key], dict):
+            raise ValueError(f"Cannot override {'.'.join(key_path)}: {key} is not a dictionary")
+        current = current[key]
+    
+    # Set the final value
+    final_key = key_path[-1]
+    old_value = current.get(final_key, "NOT_SET")
+    current[final_key] = value
+    
+    print(f"Config override: {'.'.join(key_path)} = {value} (was: {old_value})")
+
+
+def apply_config_overrides(config: Dict, overrides: List[str]) -> Dict:
+    """
+    Apply command line config overrides to the configuration dictionary.
+    
+    Args:
+        config: Base configuration dictionary
+        overrides: List of override strings in format 'key.subkey=value'
+        
+    Returns:
+        Updated configuration dictionary
+    """
+    for override in overrides:
+        try:
+            key_path, value = parse_config_override(override)
+            update_nested_dict(config, key_path, value)
+        except Exception as e:
+            print(f"Warning: Failed to apply override '{override}': {e}")
+            continue
+    
     return config
 
 
@@ -204,11 +327,26 @@ def run_cross_validation(config: Dict) -> Dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Train PPG to Respiratory Waveform Estimation')
+    parser = argparse.ArgumentParser(
+        description='Train PPG to Respiratory Waveform Estimation',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Config Override Examples:
+  python src/train.py --override training.learning_rate=0.001
+  python src/train.py --override training.batch_size=64 --override model.name=CNN1D
+  python src/train.py --override training.max_epochs=50 --override model.dropout=0.3
+  python src/train.py --override preprocessing.normalization=min_max
+  python src/train.py --override hardware.accelerator=cpu --override hardware.devices=1
+        """
+    )
     parser.add_argument('--config', type=str, default='configs/config.yaml',
                        help='Path to configuration file')
     parser.add_argument('--seed', type=int, default=42,
                        help='Random seed for reproducibility')
+    parser.add_argument('--override', action='append', default=[],
+                       help='Override config values. Format: key.subkey=value (can be used multiple times)')
+    parser.add_argument('--print-config', action='store_true',
+                       help='Print the final configuration and exit without training')
     
     args = parser.parse_args()
     
@@ -218,8 +356,18 @@ def main():
     # Load configuration
     config = load_config(args.config)
     
-    print("Configuration loaded:")
+    # Apply config overrides
+    if args.override:
+        print(f"\nApplying {len(args.override)} config override(s):")
+        config = apply_config_overrides(config, args.override)
+    
+    print("\nFinal Configuration:")
     print(yaml.dump(config, default_flow_style=False))
+    
+    # If only printing config, exit here
+    if args.print_config:
+        print("Configuration printed. Exiting without training.")
+        return
     
     # Create necessary directories
     os.makedirs(config['logging']['log_dir'], exist_ok=True)
