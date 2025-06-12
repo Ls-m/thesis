@@ -8,7 +8,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 import argparse
 from typing import Dict, List, Any
 import pickle
-
+from time import sleep
 from data_utils import DataPreprocessor, create_cross_validation_splits, prepare_fold_data
 from dataset import create_data_loaders
 from lightning_module import PPGRespiratoryLightningModule
@@ -238,6 +238,7 @@ def train_single_fold(config: Dict, fold_data: Dict, fold_id: int,
         ckpt_path='best'
     )
     
+    sleep(10)
     # Get predictions for ensemble
     model = PPGRespiratoryLightningModule.load_from_checkpoint(
         trainer.checkpoint_callback.best_model_path,
