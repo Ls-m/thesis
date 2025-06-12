@@ -1,0 +1,45 @@
+cross_validation:
+  method: leave_one_out
+data:
+  csv_folder: csv
+  input_column: PPG
+  overlap: 0.5
+  sampling_rate: 256
+  segment_length: 1024
+  target_column: NASAL CANULA
+evaluation:
+  metrics:
+  - pearson_correlation
+  - mse
+  - mae
+  plot_samples: 2
+hardware:
+  accelerator: auto
+  devices: 1
+  precision: 32
+logging:
+  experiment_name: test_run
+  log_dir: logs
+  save_top_k: 1
+model:
+  dropout: 0.2
+  hidden_size: 64
+  input_size: 256
+  name: CNN1D
+  num_layers: 2
+preprocessing:
+  bandpass_filter:
+    high_freq: 2.0
+    low_freq: 0.1
+    order: 4
+  downsample:
+    target_rate: 64
+  normalization: z_score
+training:
+  batch_size: 16
+  learning_rate: 0.001
+  max_epochs: 5
+  optimizer: adam
+  patience: 3
+  scheduler: reduce_on_plateau
+  val_split: 0.2

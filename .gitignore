@@ -1,0 +1,14 @@
+/.DS_Store
+/.vscode
+# Top-level folders
+csv/
+logs/
+results/
+
+# Subfolders under src/
+src/csv/
+src/logs/
+src/results/
+
+__pycache__/
+*.py[cod]
