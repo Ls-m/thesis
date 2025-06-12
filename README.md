@@ -77,13 +77,59 @@ Edit `configs/config.yaml` to customize:
 Run leave-one-out cross-validation training:
 
 ```bash
-cd src
-python train.py --config ../configs/config.yaml --seed 42
+python src/train.py --config configs/config.yaml --seed 42
 ```
 
 Options:
 - `--config`: Path to configuration file (default: `configs/config.yaml`)
 - `--seed`: Random seed for reproducibility (default: 42)
+- `--override`: Override any config value from command line (can be used multiple times)
+- `--print-config`: Print final configuration and exit without training
+
+### Config Overrides
+
+You can override any configuration parameter from the command line without editing the YAML file:
+
+```bash
+# Override single parameters
+python src/train.py --override training.learning_rate=0.001
+
+# Override multiple parameters
+python src/train.py --override training.learning_rate=0.001 --override model.name=CNN1D --override training.batch_size=64
+
+# Override nested parameters
+python src/train.py --override preprocessing.bandpass_filter.low_freq=0.1 --override preprocessing.bandpass_filter.high_freq=1.5
+
+# Print configuration without training
+python src/train.py --print-config --override training.learning_rate=0.001
+```
+
+#### Common Override Examples
+
+**Training Parameters:**
+```bash
+python src/train.py --override training.learning_rate=0.001 --override training.max_epochs=100
+python src/train.py --override training.batch_size=256 --override training.optimizer=adam
+```
+
+**Model Configuration:**
+```bash
+python src/train.py --override model.name=CNN1D --override model.hidden_size=256
+python src/train.py --override model.dropout=0.3 --override model.num_layers=4
+```
+
+**Hardware Settings:**
+```bash
+python src/train.py --override hardware.accelerator=cpu
+python src/train.py --override hardware.precision=16 --override hardware.devices=2
+```
+
+**Quick Debug Run:**
+```bash
+python src/train.py --override training.max_epochs=1 --override training.batch_size=32 --override logging.experiment_name=debug_test
+```
+
+For detailed information about config overrides, see [CONFIG_OVERRIDE_GUIDE.md](CONFIG_OVERRIDE_GUIDE.md).
 
 ### Evaluation
 
