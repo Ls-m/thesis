@@ -276,9 +276,9 @@ If you use this code in your research, please cite:
 ```bibtex
 @misc{ppg_respiratory_estimation,
   title={PPG to Respiratory Waveform Estimation using Deep Learning},
-  author={Your Name},
-  year={2024},
-  howpublished={\url{https://github.com/your-repo}}
+  author={Elham Farang},
+  year={2025},
+  howpublished={\url{https://github.com/Ls-m/thesis}}
 }
 ```
 
@@ -296,4 +296,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Contact
 
-For questions or issues, please contact [your-email@domain.com] or open an issue on GitHub.
+For questions or issues, please contact [elham.fr80@gmail.com] or open an issue on GitHub.
