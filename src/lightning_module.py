@@ -39,7 +39,8 @@ class PPGRespiratoryLightningModule(pl.LightningModule):
         # Loss function
         self.criterion = nn.MSELoss()
         
-        # Metrics storage
+        # Metrics storage for epoch-end calculations
+        self.training_step_outputs = []
         self.validation_step_outputs = []
         self.test_step_outputs = []
         
@@ -96,10 +97,49 @@ class PPGRespiratoryLightningModule(pl.LightningModule):
             print(f"Inf loss at batch {batch_idx}")
             return None
         
+        # Store outputs for epoch-end calculations
+        self.training_step_outputs.append({
+            'train_loss': loss,
+            'pred': pred.detach().cpu(),
+            'target': resp.detach().cpu()
+        })
+        
         # Log metrics
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True)
         
         return loss
+    
+    def on_train_epoch_end(self):
+        if not self.training_step_outputs:
+            return
+            
+        # Calculate average loss
+        avg_loss = torch.stack([x['train_loss'] for x in self.training_step_outputs]).mean()
+        
+        # Calculate Pearson correlation
+        all_preds = torch.cat([x['pred'] for x in self.training_step_outputs], dim=0)
+        all_targets = torch.cat([x['target'] for x in self.training_step_outputs], dim=0)
+        
+        # Flatten for correlation calculation
+        preds_flat = all_preds.flatten().numpy()
+        targets_flat = all_targets.flatten().numpy()
+        
+        # Calculate correlation
+        if len(preds_flat) > 1 and np.std(preds_flat) > 0 and np.std(targets_flat) > 0:
+            correlation, _ = pearsonr(preds_flat, targets_flat)
+        else:
+            correlation = 0.0
+        
+        # Calculate MAE
+        mae = F.l1_loss(all_preds, all_targets)
+        
+        # Log metrics for TensorBoard
+        self.log('train_loss_epoch', avg_loss, prog_bar=False)
+        self.log('train_correlation', correlation, prog_bar=True)
+        self.log('train_mae', mae, prog_bar=False)
+        
+        # Clear outputs
+        self.training_step_outputs.clear()
     
     def validation_step(self, batch, batch_idx):
         ppg, resp = batch
