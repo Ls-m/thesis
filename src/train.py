@@ -12,6 +12,7 @@ from time import sleep
 from data_utils import DataPreprocessor, create_cross_validation_splits, prepare_fold_data
 from dataset import create_data_loaders
 from lightning_module import PPGRespiratoryLightningModule
+from preprocessing_config import PreprocessingConfigManager, EnhancedDataPreprocessor
 
 
 def load_config(config_path: str) -> Dict:
@@ -273,12 +274,16 @@ def train_single_fold(config: Dict, fold_data: Dict, fold_id: int,
     return fold_results
 
 
-def run_cross_validation(config: Dict) -> Dict:
-    """Run leave-one-out cross-validation."""
+def run_cross_validation(config: Dict, target_subject: str = None) -> Dict:
+    """Run leave-one-out cross-validation or single fold training."""
     
     print("Starting data preprocessing...")
     
-    # Initialize data preprocessor
+    # Initialize enhanced data preprocessor with config manager
+    config_manager = PreprocessingConfigManager()
+    enhanced_preprocessor = EnhancedDataPreprocessor(config, config_manager)
+    
+    # Use regular preprocessor for actual processing (for compatibility)
     preprocessor = DataPreprocessor(config)
     
     # Prepare dataset
@@ -286,10 +291,49 @@ def run_cross_validation(config: Dict) -> Dict:
     
     print(f"Processed data for {len(processed_data)} subjects")
     
-    # Create cross-validation splits
-    cv_splits = create_cross_validation_splits(processed_data)
+    # List available subjects
+    available_subjects = list(processed_data.keys())
+    print(f"Available subjects: {available_subjects}")
     
-    print(f"Created {len(cv_splits)} cross-validation folds")
+    # Save preprocessing configuration
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    model_name = config['model']['name']
+    config_name = f"{model_name}_preprocessing_{timestamp}"
+    
+    # Create some basic stats for saving
+    total_segments = sum(len(ppg_segments) for ppg_segments, _ in processed_data.values())
+    preprocessing_stats = {
+        'subjects_processed': len(processed_data),
+        'total_segments': total_segments,
+        'model_used': model_name,
+        'timestamp': timestamp
+    }
+    
+    saved_config_path = config_manager.save_preprocessing_config(
+        config, preprocessing_stats, config_name
+    )
+    print(f"Preprocessing configuration saved as: {config_name}")
+    
+    # Create cross-validation splits
+    if target_subject:
+        # Single fold training with specified subject as test set
+        if target_subject not in available_subjects:
+            print(f"Error: Subject '{target_subject}' not found in dataset.")
+            print(f"Available subjects: {available_subjects}")
+            raise ValueError(f"Subject '{target_subject}' not found in dataset")
+        
+        print(f"Running single fold training with test subject: {target_subject}")
+        train_subjects = [s for s in available_subjects if s != target_subject]
+        cv_splits = [{
+            'train_subjects': train_subjects,
+            'test_subject': target_subject,
+            'fold_id': 0
+        }]
+    else:
+        # Standard leave-one-out cross-validation
+        cv_splits = create_cross_validation_splits(processed_data)
+        print(f"Running full leave-one-out cross-validation with {len(cv_splits)} folds")
     
     # Store all fold results
     all_fold_results = []
@@ -299,6 +343,9 @@ def run_cross_validation(config: Dict) -> Dict:
         fold_id = cv_split['fold_id']
         test_subject = cv_split['test_subject']
         train_subjects = cv_split['train_subjects']
+        
+        print(f"\nFold {fold_id}: Test subject = {test_subject}")
+        print(f"Training subjects ({len(train_subjects)}): {train_subjects}")
         
         # Prepare fold data
         fold_data = prepare_fold_data(
@@ -320,10 +367,18 @@ def run_cross_validation(config: Dict) -> Dict:
         os.makedirs('results', exist_ok=True)
         with open(results_path, 'wb') as f:
             pickle.dump(fold_results, f)
+        
+        # If running single fold, break after first iteration
+        if target_subject:
+            break
     
     return {
         'fold_results': all_fold_results,
-        'processed_data': processed_data
+        'processed_data': processed_data,
+        'preprocessing_config_name': config_name,
+        'preprocessing_config_path': saved_config_path,
+        'target_subject': target_subject,
+        'mode': 'single_fold' if target_subject else 'full_cv'
     }
 
 
@@ -332,18 +387,37 @@ def main():
         description='Train PPG to Respiratory Waveform Estimation',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Config Override Examples:
+Examples:
+  # Full leave-one-out cross-validation (default)
+  python src/train.py --config configs/improved_config.yaml
+  
+  # Single fold with specific test subject
+  python src/train.py --config configs/improved_config.yaml --fold subject_01
+  
+  # Use benchmark dataset (BIDMC)
+  python src/train.py --config configs/improved_config.yaml --dataset bidmc
+  
+  # Use alternate dataset
+  python src/train.py --config configs/improved_config.yaml --dataset csv
+  
+  # Single fold with benchmark dataset
+  python src/train.py --config configs/improved_config.yaml --dataset bidmc --fold subject_01
+  
+  # Config overrides
   python src/train.py --override training.learning_rate=0.001
-  python src/train.py --override training.batch_size=64 --override model.name=CNN1D
-  python src/train.py --override training.max_epochs=50 --override model.dropout=0.3
-  python src/train.py --override preprocessing.normalization=min_max
-  python src/train.py --override hardware.accelerator=cpu --override hardware.devices=1
+  python src/train.py --override model.name=RWKV --override training.batch_size=32
         """
     )
     parser.add_argument('--config', type=str, default='configs/config.yaml',
                        help='Path to configuration file')
     parser.add_argument('--seed', type=int, default=42,
                        help='Random seed for reproducibility')
+    parser.add_argument('--fold', type=str, default=None,
+                       help='Specific subject to use as test set (e.g., subject_01, AL25). If not specified, runs full leave-one-out CV')
+    parser.add_argument('--dataset', type=str, choices=['bidmc', 'csv'], default=None,
+                       help='Dataset to use: "bidmc" for benchmark dataset (src/bidmc/), "csv" for alternate dataset (src/csv/)')
+    parser.add_argument('--list-subjects', action='store_true',
+                       help='List available subjects in the dataset and exit')
     parser.add_argument('--override', action='append', default=[],
                        help='Override config values. Format: key.subkey=value (can be used multiple times)')
     parser.add_argument('--print-config', action='store_true',
@@ -357,10 +431,37 @@ Config Override Examples:
     # Load configuration
     config = load_config(args.config)
     
+    # Handle dataset selection
+    if args.dataset:
+        if args.dataset == 'bidmc':
+            config['data']['csv_folder'] = 'src/bidmc'
+            print(f"Using benchmark dataset: {config['data']['csv_folder']}")
+        elif args.dataset == 'csv':
+            config['data']['csv_folder'] = 'src/csv'
+            print(f"Using alternate dataset: {config['data']['csv_folder']}")
+    
     # Apply config overrides
     if args.override:
         print(f"\nApplying {len(args.override)} config override(s):")
         config = apply_config_overrides(config, args.override)
+    
+    # If listing subjects, do that and exit
+    if args.list_subjects:
+        print("Loading dataset to list available subjects...")
+        preprocessor = DataPreprocessor(config)
+        processed_data = preprocessor.prepare_dataset(config['data']['csv_folder'])
+        available_subjects = list(processed_data.keys())
+        
+        print(f"\nDataset: {config['data']['csv_folder']}")
+        print(f"Available subjects ({len(available_subjects)}):")
+        for i, subject in enumerate(sorted(available_subjects), 1):
+            print(f"  {i:2d}. {subject}")
+        
+        print(f"\nTo train with a specific subject as test set, use:")
+        print(f"  python src/train.py --config {args.config} --fold <subject_name>")
+        if args.dataset:
+            print(f"  python src/train.py --config {args.config} --dataset {args.dataset} --fold <subject_name>")
+        return
     
     print("\nFinal Configuration:")
     print(yaml.dump(config, default_flow_style=False))
@@ -370,19 +471,36 @@ Config Override Examples:
         print("Configuration printed. Exiting without training.")
         return
     
+    # Print training mode
+    if args.fold:
+        print(f"\n🎯 SINGLE FOLD TRAINING MODE")
+        print(f"Test Subject: {args.fold}")
+        print(f"Dataset: {config['data']['csv_folder']}")
+    else:
+        print(f"\n🔄 FULL LEAVE-ONE-OUT CROSS-VALIDATION MODE")
+        print(f"Dataset: {config['data']['csv_folder']}")
+    
     # Create necessary directories
     os.makedirs(config['logging']['log_dir'], exist_ok=True)
     os.makedirs('results', exist_ok=True)
     
     # Run cross-validation
-    cv_results = run_cross_validation(config)
+    cv_results = run_cross_validation(config, target_subject=args.fold)
     
     # Save complete results
-    results_path = os.path.join('results', 'complete_cv_results.pkl')
+    if args.fold:
+        results_filename = f'single_fold_{args.fold}_results.pkl'
+    else:
+        results_filename = 'complete_cv_results.pkl'
+    
+    results_path = os.path.join('results', results_filename)
     with open(results_path, 'wb') as f:
         pickle.dump(cv_results, f)
     
-    print(f"\nCross-validation completed!")
+    print(f"\nTraining completed!")
+    print(f"Mode: {cv_results['mode']}")
+    if cv_results['target_subject']:
+        print(f"Test Subject: {cv_results['target_subject']}")
     print(f"Results saved to: {results_path}")
     
     # Print summary statistics
@@ -402,9 +520,14 @@ Config Override Examples:
     
     if correlations:
         print(f"\nSummary Statistics:")
-        print(f"Average Correlation: {np.mean(correlations):.4f} ± {np.std(correlations):.4f}")
-        print(f"Average Loss: {np.mean(losses):.4f} ± {np.std(losses):.4f}")
-        print(f"Average MAE: {np.mean(maes):.4f} ± {np.std(maes):.4f}")
+        if len(correlations) == 1:
+            print(f"Test Correlation: {correlations[0]:.4f}")
+            print(f"Test Loss: {losses[0]:.4f}")
+            print(f"Test MAE: {maes[0]:.4f}")
+        else:
+            print(f"Average Correlation: {np.mean(correlations):.4f} ± {np.std(correlations):.4f}")
+            print(f"Average Loss: {np.mean(losses):.4f} ± {np.std(losses):.4f}")
+            print(f"Average MAE: {np.mean(maes):.4f} ± {np.std(maes):.4f}")
 
 
 if __name__ == "__main__":
