@@ -1,6 +1,7 @@
 from .cnn1d import CNN1D, ResidualCNN1D
 from .lstm import LSTM, BiLSTM
 from .cnn_lstm import CNN_LSTM, AttentionCNN_LSTM
+from .rwkv import RWKV, ImprovedTransformer, WaveNet
 
 
 def get_model(model_name: str, **kwargs):
@@ -12,7 +13,10 @@ def get_model(model_name: str, **kwargs):
         'LSTM': LSTM,
         'BiLSTM': BiLSTM,
         'CNN_LSTM': CNN_LSTM,
-        'AttentionCNN_LSTM': AttentionCNN_LSTM
+        'AttentionCNN_LSTM': AttentionCNN_LSTM,
+        'RWKV': RWKV,
+        'ImprovedTransformer': ImprovedTransformer,
+        'WaveNet': WaveNet
     }
     
     if model_name not in models:
@@ -23,5 +27,6 @@ def get_model(model_name: str, **kwargs):
 
 __all__ = [
     'CNN1D', 'ResidualCNN1D', 'LSTM', 'BiLSTM', 
-    'CNN_LSTM', 'AttentionCNN_LSTM', 'get_model'
+    'CNN_LSTM', 'AttentionCNN_LSTM', 'RWKV', 
+    'ImprovedTransformer', 'WaveNet', 'get_model'
 ]
