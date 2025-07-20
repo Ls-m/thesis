@@ -74,10 +74,42 @@ Edit `configs/config.yaml` to customize:
 
 ### Training
 
+#### Standard Training (with potential data leakage)
 Run leave-one-out cross-validation training:
 
 ```bash
 python src/train.py --config configs/config.yaml --seed 42
+```
+
+#### Subject-wise Training (recommended - no data leakage)
+Run training with proper subject-wise splitting to prevent data leakage:
+
+```bash
+# Full cross-validation with subject-wise splitting
+python src/train_subject_wise.py --config configs/config.yaml
+
+# Single fold with specific test subject
+python src/train_subject_wise.py --config configs/config.yaml --fold subject_01
+
+# Use BIDMC dataset
+python src/train_subject_wise.py --config configs/config.yaml --dataset bidmc
+
+# Custom validation split (30% of training subjects for validation)
+python src/train_subject_wise.py --config configs/config.yaml --val-split 0.3
+
+# List available subjects
+python src/train_subject_wise.py --list-subjects --dataset bidmc
+```
+
+**⚠️ Important**: The subject-wise training script (`train_subject_wise.py`) is recommended as it ensures proper separation of subjects across train/validation/test sets, preventing data leakage that can lead to overly optimistic results.
+
+For detailed information about subject-wise splitting, see [SUBJECT_WISE_SPLITTING_README.md](SUBJECT_WISE_SPLITTING_README.md).
+
+#### Demonstration
+To see how subject-wise splitting works and validate that there's no data leakage:
+
+```bash
+python src/demo_subject_wise_splitting.py
 ```
 
 Options:
