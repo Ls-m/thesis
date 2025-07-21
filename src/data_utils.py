@@ -25,12 +25,14 @@ class DataPreprocessor:
         for filename in os.listdir(csv_path):
             if filename.endswith('.csv'):
                 subject_id = filename.replace('.csv', '')
+                df = pd.read_csv(os.path.join(csv_path, filename))
                 try:
                     # Try reading as tab-separated first, then comma-separated
-                    try:
-                        df = pd.read_csv(os.path.join(csv_path, filename), sep='\t')
-                    except:
-                        df = pd.read_csv(os.path.join(csv_path, filename))
+                    # try:
+                    #     df = pd.read_csv(os.path.join(csv_path, filename), sep='\t')
+                        
+                    # except:
+                    #     df = pd.read_csv(os.path.join(csv_path, filename))
                     
                     # Skip the first row which contains sampling rates
                     df = df.iloc[1:].reset_index(drop=True)
