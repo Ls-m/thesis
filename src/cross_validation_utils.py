@@ -177,7 +177,103 @@ class CrossValidationManager:
             'test_subjects': test_subjects,
             'train_subjects': train_subjects
         }
-    
+
+    def prepare_subject_wise_fold_data_my_kfold(self, processed_data: Dict[str, Tuple[np.ndarray, np.ndarray]], 
+                                      train_subjects: List[str], 
+                                      val_subjects: List[str], 
+                                      test_subjects: str) -> Dict:
+        """
+        Prepare data for a specific fold with proper subject-wise splitting.
+        
+        Args:
+            processed_data: Dictionary mapping subject IDs to (PPG, respiratory) data
+            train_subjects: List of subjects to use for training
+            val_subjects: List of subjects to use for validation
+            test_subject: Subject to use for testing
+            
+        Returns:
+            Dictionary containing train/val/test data
+        """
+        
+        # Combine training data from multiple subjects
+        train_ppg_list = []
+        train_resp_list = []
+        
+        for subject in train_subjects:
+            if subject in processed_data:
+                ppg_segments, resp_segments = processed_data[subject]
+                train_ppg_list.append(ppg_segments)
+                train_resp_list.append(resp_segments)
+            else:
+                print(f"Warning: Training subject '{subject}' not found in processed data")
+        
+        if not train_ppg_list:
+            raise ValueError("No training data available")
+        
+        train_ppg = np.concatenate(train_ppg_list, axis=0)
+        train_resp = np.concatenate(train_resp_list, axis=0)
+        
+        # Combine validation data from multiple subjects
+        val_ppg_list = []
+        val_resp_list = []
+        
+        for subject in val_subjects:
+            if subject in processed_data:
+                ppg_segments, resp_segments = processed_data[subject]
+                val_ppg_list.append(ppg_segments)
+                val_resp_list.append(resp_segments)
+            else:
+                print(f"Warning: Validation subject '{subject}' not found in processed data")
+        
+        if val_ppg_list:
+            val_ppg = np.concatenate(val_ppg_list, axis=0)
+            val_resp = np.concatenate(val_resp_list, axis=0)
+            print("********* val subjects have been correctly created ********")
+        else:
+            # If no validation subjects, use a portion of training data
+            print("Warning: No validation subjects available, using 20% of training data")
+            n_samples = len(train_ppg)
+            n_val = int(n_samples * 0.2)
+            
+            # Shuffle indices
+            indices = np.random.permutation(n_samples)
+            val_indices = indices[:n_val]
+            train_indices = indices[n_val:]
+            
+            val_ppg = train_ppg[val_indices]
+            val_resp = train_resp[val_indices]
+            train_ppg = train_ppg[train_indices]
+            train_resp = train_resp[train_indices]
+        
+        # Combine testing data from multiple subjects
+        test_ppg_list = []
+        test_resp_list = []
+        
+        for subject in test_subjects:
+            if subject in processed_data:
+                ppg_segments, resp_segments = processed_data[subject]
+                test_ppg_list.append(ppg_segments)
+                test_resp_list.append(resp_segments)
+            else:
+                print(f"Warning: Testing subject '{subject}' not found in processed data")
+        
+        if not test_ppg_list:
+            raise ValueError("No testing data available")
+        
+        test_ppg = np.concatenate(test_ppg_list, axis=0)
+        test_resp = np.concatenate(test_resp_list, axis=0)
+        
+        return {
+            'train_ppg': train_ppg,
+            'train_resp': train_resp,
+            'val_ppg': val_ppg,
+            'val_resp': val_resp,
+            'test_ppg': test_ppg,
+            'test_resp': test_resp,
+            'train_subjects': train_subjects,
+            'val_subjects': val_subjects,
+            'test_subjects': test_subjects
+        } 
     def prepare_subject_wise_fold_data(self, processed_data: Dict[str, Tuple[np.ndarray, np.ndarray]], 
                                       train_subjects: List[str], 
                                       val_subjects: List[str], 
@@ -228,6 +324,7 @@ class CrossValidationManager:
         if val_ppg_list:
             val_ppg = np.concatenate(val_ppg_list, axis=0)
             val_resp = np.concatenate(val_resp_list, axis=0)
+            print("********* val subjects have been correctly created ********")
         else:
             # If no validation subjects, use a portion of training data
             print("Warning: No validation subjects available, using 20% of training data")
