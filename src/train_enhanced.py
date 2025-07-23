@@ -235,7 +235,7 @@ def train_single_fold_enhanced(config: Dict, fold_data: Dict, fold_id: int,
         print(f"Test Correlation: {test_results[0].get('test_correlation', 'N/A'):.4f}")
         print(f"Test Loss: {test_results[0].get('test_loss', 'N/A'):.4f}")
         print(f"Test MAE: {test_results[0].get('test_mae', 'N/A'):.4f}")
-    
+    print('best model path: ',trainer.checkpoint_callback.best_model_path)
     return fold_results
 
 
@@ -336,13 +336,29 @@ def run_enhanced_cross_validation(config: Dict, cv_method: str = 'leave_one_out'
             print(f"Training subjects ({len(train_subjects)}): {train_subjects}")
             print(f"Validation subjects ({len(val_subjects)}): {val_subjects}")
             
+            if val_subjects:
+                print("**************** got here ****************")
+                fold_data = cv_manager.prepare_subject_wise_fold_data_my_kfold(
+                    processed_data,
+                    train_subjects,
+                    val_subjects,
+                    test_subjects
+                )
+            else:
+                # Fallback to old method if no validation subjects
+                fold_data = cv_manager.prepare_fold_data_kfold(
+                    processed_data,
+                    train_subjects,
+                    test_subjects,
+                    val_split=optimized_config['training']['val_split']
+                )
             # Prepare fold data for k-fold with subject-wise validation
-            fold_data = cv_manager.prepare_fold_data_kfold(
-                processed_data,
-                train_subjects,
-                test_subjects,
-                val_split=optimized_config['training']['val_split']
-            )
+            # fold_data = cv_manager.prepare_fold_data_kfold(
+            #     processed_data,
+            #     train_subjects,
+            #     test_subjects,
+            #     val_split=optimized_config['training']['val_split']
+            # )
         else:
             # LOOCV or single subject with subject-wise validation
             train_subjects = cv_split['train_subjects']
