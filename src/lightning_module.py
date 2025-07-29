@@ -12,6 +12,14 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import get_model
 
+# Import AdaBelief optimizer
+try:
+    from adabelief_pytorch import AdaBelief
+    ADABELIEF_AVAILABLE = True
+except ImportError:
+    ADABELIEF_AVAILABLE = False
+    print("Warning: AdaBelief optimizer not available. Install with: pip install adabelief-pytorch")
+
 
 class PPGRespiratoryLightningModule(pl.LightningModule):
     """PyTorch Lightning module for PPG to respiratory waveform estimation."""
@@ -253,7 +261,7 @@ class PPGRespiratoryLightningModule(pl.LightningModule):
         }
     
     def configure_optimizers(self):
-        # Get weight decay from config if available
+        # Get optimizer parameters from config
         weight_decay = self.config['training'].get('weight_decay', 1e-4)
         
         # Ensure weight_decay is a valid positive float
@@ -263,24 +271,46 @@ class PPGRespiratoryLightningModule(pl.LightningModule):
         
         weight_decay = float(weight_decay)  # Ensure it's a float
         
-        # Optimizer
+        # AdaBelief specific parameters
+        adabelief_eps = self.config['training'].get('adabelief_eps', 1e-16)
+        adabelief_betas = self.config['training'].get('adabelief_betas', (0.9, 0.999))
+        adabelief_weight_decouple = self.config['training'].get('adabelief_weight_decouple', True)
+        adabelief_rectify = self.config['training'].get('adabelief_rectify', True)
+        
+        # Optimizer selection
         if self.optimizer_name.lower() == 'adam':
             optimizer = Adam(self.parameters(), lr=self.learning_rate)
         elif self.optimizer_name.lower() == 'adamw':
             optimizer = AdamW(self.parameters(), lr=self.learning_rate, weight_decay=weight_decay)
         elif self.optimizer_name.lower() == 'sgd':
             optimizer = SGD(self.parameters(), lr=self.learning_rate, momentum=0.9, weight_decay=weight_decay)
+        elif self.optimizer_name.lower() == 'adabelief':
+            if not ADABELIEF_AVAILABLE:
+                print("Warning: AdaBelief not available, falling back to AdamW")
+                optimizer = AdamW(self.parameters(), lr=self.learning_rate, weight_decay=weight_decay)
+            else:
+                optimizer = AdaBelief(
+                    self.parameters(),
+                    lr=self.learning_rate,
+                    eps=adabelief_eps,
+                    betas=adabelief_betas,
+                    weight_decouple=adabelief_weight_decouple,
+                    rectify=adabelief_rectify,
+                    weight_decay=weight_decay
+                )
+                print(f"Using AdaBelief optimizer with lr={self.learning_rate}, weight_decay={weight_decay}")
         else:
+            print(f"Warning: Unknown optimizer '{self.optimizer_name}', falling back to Adam")
             optimizer = Adam(self.parameters(), lr=self.learning_rate)
         
-        # Scheduler
+        # Scheduler configuration
         if self.scheduler_name.lower() == 'reduce_on_plateau':
             scheduler = ReduceLROnPlateau(
                 optimizer, 
                 mode='min', 
                 factor=0.5, 
-                patience=5, 
-                
+                patience=5,
+                verbose=True
             )
             return {
                 'optimizer': optimizer,
@@ -299,3 +329,28 @@ class PPGRespiratoryLightningModule(pl.LightningModule):
             }
         else:
             return optimizer
+    
+    def on_train_batch_end(self, outputs, batch, batch_idx):
+        """Log learning rate after each training batch for TensorBoard monitoring."""
+        # Get current learning rate from optimizer
+        current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
+        
+        # Log learning rate to TensorBoard
+        self.log('learning_rate', current_lr, on_step=True, on_epoch=False, prog_bar=False)
+        
+        # Log additional optimizer-specific metrics for AdaBelief
+        if self.optimizer_name.lower() == 'adabelief' and ADABELIEF_AVAILABLE:
+            optimizer = self.trainer.optimizers[0]
+            if hasattr(optimizer, 'state') and len(optimizer.state) > 0:
+                # Get first parameter's state for monitoring
+                first_param = next(iter(self.parameters()))
+                if first_param in optimizer.state:
+                    state = optimizer.state[first_param]
+                    if 'step' in state:
+                        self.log('optimizer_step', float(state['step']), on_step=True, on_epoch=False, prog_bar=False)
+                    if 'exp_avg' in state and 'exp_avg_sq' in state:
+                        # Log gradient statistics
+                        exp_avg_norm = state['exp_avg'].norm().item()
+                        exp_avg_sq_norm = state['exp_avg_sq'].norm().item()
+                        self.log('exp_avg_norm', exp_avg_norm, on_step=True, on_epoch=False, prog_bar=False)
+                        self.log('exp_avg_sq_norm', exp_avg_sq_norm, on_step=True, on_epoch=False, prog_bar=False)
