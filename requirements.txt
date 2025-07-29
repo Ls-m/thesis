@@ -22,6 +22,12 @@ tqdm>=4.62.0
 # Optional: for better performance
 numba>=0.56.0
 
+# Hyperparameter optimization
+optuna>=3.0.0
+
+# Additional optimizers
+adabelief-pytorch>=0.2.1
+
 # Development tools (optional)
 jupyter>=1.0.0
 ipykernel>=6.0.0
