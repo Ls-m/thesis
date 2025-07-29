@@ -34,10 +34,18 @@ training:
   max_epochs: 50    # More epochs for better convergence
   patience: 15      # Early stopping patience
   val_split: 0.2    # 20% of training data for validation
-  optimizer: "adamw"  # AdamW with weight decay for better regularization
-  scheduler: "reduce_on_plateau"
+  
+  # Optimizer Configuration
+  optimizer: "adamw"  # Options: adam, adamw, sgd, adabelief
+  scheduler: "reduce_on_plateau"  # Options: reduce_on_plateau, cosine, none
   weight_decay: 1e-4  # L2 regularization
   gradient_clip_val: 1.0  # Gradient clipping
+  
+  # AdaBelief specific parameters (used when optimizer: "adabelief")
+  adabelief_eps: 1e-16  # Small constant for numerical stability
+  adabelief_betas: [0.9, 0.999]  # Exponential decay rates for moment estimates
+  adabelief_weight_decouple: true  # Whether to decouple weight decay
+  adabelief_rectify: true  # Whether to use rectified updates
   
 # Cross Validation Configuration
 cross_validation:
