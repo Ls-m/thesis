@@ -21,7 +21,17 @@ for filename in os.listdir(input_dir):
         filepath = os.path.join(input_dir, filename)
         data = load_mat(filepath)
         params = data['param']
-        
+        reference = data['reference']
+        print(reference)
+        print("len reference is, ", reference['rr']['co2']['y'].size)
+        h = reference['rr']['co2']['y']
+        print(h)
+        print("len ppg is, ",np.array(data['signal']['pleth']['y']).flatten().size)
+        print(reference['rr']['co2']['x'])
+        print("*********")
+        print(data['signal']['pleth'])
+        print(params)
+        exit()
         print(f"{filename} — keys: {data.keys()}")
 
         signals = data['signal']
