@@ -5,6 +5,7 @@ from scipy import signal
 from scipy.stats import zscore
 from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from typing import Tuple, List, Dict
+# from vmdpy import VMD
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -157,6 +158,19 @@ class DataPreprocessor:
         else:
             return signal_data
     
+    # def denoise_signal(self, signal_data: np.ndarray ) -> np.ndarray:
+    #     if len(signal_data) == 0 or np.all(np.isnan(signal_data)):
+    #         return signal_data
+    #     alpha = 2000       # Moderate bandwidth constraint
+    #     tau = 0.            # Noise-tolerance (Lagrange multiplier)
+    #     K = 5              # Number of modes to decompose into
+    #     DC = 0             # No DC part imposed
+    #     init = 1           # Initialize omegas uniformly
+    #     tol = 1e-7         # Convergence tolerance
+    #     u, u_hat, omega = VMD(signal_data, alpha, tau, K, DC, init, tol)
+    #     denoised_ppg = np.sum(u[:3, :], axis=0)
+    #     return denoised_ppg
+        
     def segment_signal(self, ppg_signal: np.ndarray, resp_signal: np.ndarray,
                       segment_length: int, overlap: float) -> Tuple[np.ndarray, np.ndarray]:
         """Segment signals into overlapping windows."""
@@ -216,6 +230,12 @@ class DataPreprocessor:
         print(f"  After normalization: PPG NaN={np.isnan(ppg_normalized).sum()}, RESP NaN={np.isnan(resp_normalized).sum()}")
         print(f"  PPG stats: min={ppg_normalized.min():.4f}, max={ppg_normalized.max():.4f}, mean={ppg_normalized.mean():.4f}")
         print(f"  RESP stats: min={resp_normalized.min():.4f}, max={resp_normalized.max():.4f}, mean={resp_normalized.mean():.4f}")
+
+        # # Denoise
+        # ppg_normalized = self.denoise_signal(ppg_normalized)
+
+        # print(f"  After denoise: PPG NaN={np.isnan(ppg_normalized).sum()}, RESP NaN={np.isnan(resp_normalized).sum()}")
+        # print(f"  PPG stats: min={ppg_normalized.min():.4f}, max={ppg_normalized.max():.4f}, mean={ppg_normalized.mean():.4f}")
         
         # Segment
         segment_length = self.data_config['segment_length'] // (original_rate // target_rate)

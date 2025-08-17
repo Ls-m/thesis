@@ -3,6 +3,102 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+class RWKVBlockV5(nn.Module):
+    """RWKV-v5 block (multi-head style) for time series."""
+    def __init__(self, d_model: int, n_heads: int = 4, d_ff: int = None, dropout: float = 0.1):
+        super().__init__()
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.head_dim = d_model // n_heads
+        self.d_ff = d_ff or 4 * d_model
+
+        # Multi-head projections
+        self.key = nn.Linear(d_model, d_model, bias=False)
+        self.value = nn.Linear(d_model, d_model, bias=False)
+        self.receptance = nn.Linear(d_model, d_model, bias=False)
+
+        # Per-head decay params
+        self.time_decay = nn.Parameter(torch.zeros(n_heads, self.head_dim))
+        self.time_first = nn.Parameter(torch.zeros(n_heads, self.head_dim))
+
+        self.output = nn.Linear(d_model, d_model, bias=False)
+
+        # Channel mixing
+        self.fc1 = nn.Linear(d_model, self.d_ff, bias=False)
+        self.fc2 = nn.Linear(self.d_ff, d_model, bias=False)
+        self.receptance_c = nn.Linear(d_model, d_model, bias=False)
+
+        self.ln1 = nn.LayerNorm(d_model)
+        self.ln2 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, state=None):
+        B, T, C = x.shape
+        x_ln = self.ln1(x)
+
+        k = self.key(x_ln).view(B, T, self.n_heads, self.head_dim)
+        v = self.value(x_ln).view(B, T, self.n_heads, self.head_dim)
+        r = self.receptance(x_ln).view(B, T, self.n_heads, self.head_dim)
+
+        wkv = self._compute_wkv_v5(k, v, r)
+        x = x + self.dropout(self.output(wkv.view(B, T, C)))
+
+        # Channel mixing
+        x_ln2 = self.ln2(x)
+        hidden = F.relu(self.fc1(x_ln2)) ** 2
+        r_c = torch.sigmoid(self.receptance_c(x_ln2))
+        x = x + self.dropout(r_c * self.fc2(hidden))
+
+        new_state = x[:, -1]
+        return x, new_state
+
+    def _compute_wkv_v5(self, k, v, r):
+        """Multi-head RWKV-v5 style WKV."""
+        B, T, H, D = k.shape
+        outputs = []
+        decay = torch.exp(-torch.exp(self.time_decay))  # (H, D)
+
+        state = torch.zeros(B, H, D, device=k.device, dtype=k.dtype)
+        for t in range(T):
+            k_t, v_t, r_t = k[:, t], v[:, t], r[:, t]
+            state = decay * state + torch.exp(self.time_first + k_t) * v_t
+            out_t = torch.sigmoid(r_t) * state
+            outputs.append(out_t.unsqueeze(1))
+        return torch.cat(outputs, dim=1)  # (B, T, H, D)
+
+class CrossAttention(nn.Module):
+    def __init__(self, d_model: int, n_heads: int = 8):
+        super().__init__()
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.head_dim = d_model // n_heads
+        
+        assert self.head_dim * n_heads == d_model, "d_model must be divisible by n_heads"
+        
+        self.query = nn.Linear(d_model, d_model)
+        self.key = nn.Linear(d_model, d_model)
+        self.value = nn.Linear(d_model, d_model)
+        self.out = nn.Linear(d_model, d_model)
+        
+    def forward(self, query, key_value):
+        # query is from time branch: (B, T, C)
+        # key_value is from freq branch: (B, F, C)
+        B, T, C = query.shape
+        _, seq_len_freq, _ = key_value.shape
+
+        Q = self.query(query).view(B, T, self.n_heads, self.head_dim).transpose(1, 2)
+        K = self.key(key_value).view(B, seq_len_freq, self.n_heads, self.head_dim).transpose(1, 2)
+        V = self.value(key_value).view(B, seq_len_freq, self.n_heads, self.head_dim).transpose(1, 2)
+
+        scores = torch.matmul(Q, K.transpose(-2, -1)) / (self.head_dim ** 0.5)
+        attn_weights = F.softmax(scores, dim=-1)  # now F is torch.nn.functional again
+        
+        # Apply attention to values
+        context = torch.matmul(attn_weights, V)
+        context = context.transpose(1, 2).contiguous().view(B, T, C)
+        
+        return self.out(context)
+
 
 class RWKVBlock(nn.Module):
     """RWKV block for time series processing."""
@@ -71,6 +167,7 @@ class RWKVBlock(nn.Module):
         return x, new_state
     
     def _compute_wkv(self, k, v, r):
+        
         """
         Improved WKV (weighted key-value) computation with better numerical stability
         and more efficient recurrent processing.
@@ -174,6 +271,214 @@ class RWKV(nn.Module):
         
         return output
 
+class RWKV_DualBranch(nn.Module):
+    """RWKV model with dual branches for time and frequency domain processing."""
+    
+    def __init__(self, input_size: int, hidden_size: int = 256, 
+                 num_layers: int = 6, dropout: float = 0.1):
+        super().__init__()
+        
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        
+        # Time domain input projection
+        self.time_proj = nn.Sequential(
+            nn.Conv1d(1, hidden_size // 2, kernel_size=7, padding=3),
+            nn.BatchNorm1d(hidden_size // 2),
+            nn.ReLU(),
+            nn.Conv1d(hidden_size // 2, hidden_size, kernel_size=5, padding=2),
+            nn.BatchNorm1d(hidden_size),
+            nn.ReLU(),
+            nn.Dropout(dropout)
+        )
+        
+        # Time domain RWKV blocks
+        self.time_rwkv = nn.ModuleList([
+            RWKVBlockV5(hidden_size, dropout=dropout)
+            for _ in range(num_layers)
+        ])
+        
+        # Frequency domain projection (magnitude and phase as 2 channels)
+        self.freq_proj = nn.Sequential(
+            nn.Conv1d(2, hidden_size // 2, kernel_size=1),
+            nn.BatchNorm1d(hidden_size // 2),
+            nn.ReLU(),
+            nn.Conv1d(hidden_size // 2, hidden_size, kernel_size=1),
+            nn.BatchNorm1d(hidden_size),
+            nn.ReLU(),
+            nn.Dropout(dropout)
+        )
+        
+        # Frequency domain RWKV blocks
+        self.freq_rwkv = nn.ModuleList([
+            RWKVBlockV5(hidden_size, dropout=dropout)
+            for _ in range(num_layers)
+        ])
+        
+        self.cross_attention = CrossAttention(hidden_size, n_heads=8)
+
+        # Fusion normalization
+        self.fusion_norm = nn.LayerNorm(hidden_size)
+        
+        # Output projection (same as original RWKV)
+        self.output_proj = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size // 2, hidden_size // 4),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size // 4, 1)
+        )
+        
+        self.ln_out = nn.LayerNorm(hidden_size)
+        
+    def forward(self, x):
+        # x shape: (batch_size, 1, sequence_length)
+        B, _, T = x.shape
+        
+        # Time domain branch
+        time_x = self.time_proj(x)  # (B, hidden_size, T)
+        time_x = time_x.transpose(1, 2)  # (B, T, hidden_size)
+        
+        state_time = None
+        for rwkv_block in self.time_rwkv:
+            time_x, state_time = rwkv_block(time_x, state_time)
+        
+        # Frequency domain branch
+        x_squeeze = x.squeeze(1)  # (B, T)
+        x_fft = torch.fft.rfft(x_squeeze, dim=1)  # (B, F) where F = T//2 + 1, complex
+        mag = torch.abs(x_fft)  # (B, F)
+        phase = torch.atan2(x_fft.imag, x_fft.real)
+
+        freq_input = torch.stack([mag, phase], dim=1)  # (B, 2, F)
+        
+        freq_x = self.freq_proj(freq_input)  # (B, hidden_size, F)
+        freq_x = freq_x.transpose(1, 2)  # (B, F, hidden_size)
+        
+        state_freq = None
+        for rwkv_block in self.freq_rwkv:
+            freq_x, state_freq = rwkv_block(freq_x, state_freq)
+        
+        # Get context from frequency features based on time features
+        freq_context = self.cross_attention(query=time_x, key_value=freq_x)
+        
+        # Fuse with a residual connection
+        fused = time_x + freq_context 
+        fused = self.fusion_norm(fused)
+        fused = self.ln_out(fused)
+        
+        # Output projection
+        output = self.output_proj(fused)  # (B, T, 1)
+        output = output.transpose(1, 2)  # (B, 1, T)
+        
+        return output
+
+
+# class RWKV_DualBranch(nn.Module):
+#     """RWKV model with dual branches for time and frequency domain processing."""
+    
+#     def __init__(self, input_size: int, hidden_size: int = 256, 
+#                  num_layers: int = 6, dropout: float = 0.1):
+#         super().__init__()
+        
+#         self.input_size = input_size
+#         self.hidden_size = hidden_size
+#         self.num_layers = num_layers
+        
+#         # Time domain input projection
+#         self.time_proj = nn.Sequential(
+#             nn.Conv1d(1, hidden_size // 2, kernel_size=7, padding=3),
+#             nn.BatchNorm1d(hidden_size // 2),
+#             nn.ReLU(),
+#             nn.Conv1d(hidden_size // 2, hidden_size, kernel_size=5, padding=2),
+#             nn.BatchNorm1d(hidden_size),
+#             nn.ReLU(),
+#             nn.Dropout(dropout)
+#         )
+        
+#         # Time domain RWKV blocks
+#         self.time_rwkv = nn.ModuleList([
+#             RWKVBlock(hidden_size, dropout=dropout)
+#             for _ in range(num_layers)
+#         ])
+        
+#         # Frequency domain projection (magnitude and phase as 2 channels)
+#         self.freq_proj = nn.Sequential(
+#             nn.Conv1d(2, hidden_size // 2, kernel_size=1),
+#             nn.BatchNorm1d(hidden_size // 2),
+#             nn.ReLU(),
+#             nn.Conv1d(hidden_size // 2, hidden_size, kernel_size=1),
+#             nn.BatchNorm1d(hidden_size),
+#             nn.ReLU(),
+#             nn.Dropout(dropout)
+#         )
+        
+#         # Frequency domain RWKV blocks
+#         self.freq_rwkv = nn.ModuleList([
+#             RWKVBlock(hidden_size, dropout=dropout)
+#             for _ in range(num_layers)
+#         ])
+        
+#         # Fusion normalization
+#         self.fusion_norm = nn.LayerNorm(hidden_size)
+        
+#         # Output projection (same as original RWKV)
+#         self.output_proj = nn.Sequential(
+#             nn.Linear(hidden_size, hidden_size // 2),
+#             nn.ReLU(),
+#             nn.Dropout(dropout),
+#             nn.Linear(hidden_size // 2, hidden_size // 4),
+#             nn.ReLU(),
+#             nn.Dropout(dropout),
+#             nn.Linear(hidden_size // 4, 1)
+#         )
+        
+#         self.ln_out = nn.LayerNorm(hidden_size)
+        
+#     def forward(self, x):
+#         # x shape: (batch_size, 1, sequence_length)
+#         B, _, T = x.shape
+        
+#         # Time domain branch
+#         time_x = self.time_proj(x)  # (B, hidden_size, T)
+#         time_x = time_x.transpose(1, 2)  # (B, T, hidden_size)
+        
+#         state_time = None
+#         for rwkv_block in self.time_rwkv:
+#             time_x, state_time = rwkv_block(time_x, state_time)
+        
+#         # Frequency domain branch
+#         x_squeeze = x.squeeze(1)  # (B, T)
+#         x_fft = torch.fft.rfft(x_squeeze, dim=1)  # (B, F) where F = T//2 + 1, complex
+#         mag = torch.abs(x_fft)  # (B, F)
+#         phase = torch.angle(x_fft)  # (B, F)
+#         freq_input = torch.stack([mag, phase], dim=1)  # (B, 2, F)
+        
+#         freq_x = self.freq_proj(freq_input)  # (B, hidden_size, F)
+#         freq_x = freq_x.transpose(1, 2)  # (B, F, hidden_size)
+        
+#         state_freq = None
+#         for rwkv_block in self.freq_rwkv:
+#             freq_x, state_freq = rwkv_block(freq_x, state_freq)
+        
+#         # Global average pooling on frequency features to get (B, 1, hidden_size)
+#         freq_global = freq_x.mean(dim=1, keepdim=True)  # (B, 1, hidden_size)
+        
+#         # Repeat frequency global features across time dimension
+#         freq_repeated = freq_global.repeat(1, T, 1)  # (B, T, hidden_size)
+        
+#         # Fuse time and frequency features (additive fusion)
+#         fused = time_x + freq_repeated
+#         fused = self.fusion_norm(fused)
+#         fused = self.ln_out(fused)
+        
+#         # Output projection
+#         output = self.output_proj(fused)  # (B, T, 1)
+#         output = output.transpose(1, 2)  # (B, 1, T)
+        
+#         return output
 
 class ImprovedTransformer(nn.Module):
     """Improved Transformer model with better architecture for signal processing."""

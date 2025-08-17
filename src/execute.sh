@@ -48,4 +48,37 @@ python train_enhanced.py --config ../configs/improved_config.yaml --override mod
 python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=ImprovedTransformer --override model.num_layers=4 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=ImprovedTransformer_d6_capno_experiment_v3 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --cv-method k_fold --n-folds 5
 
 
-python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=RWKV --override model.num_layers=6 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=RWKV_update_d6_capno_experiment_v3 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --cv-method k_fold --n-folds 5
+
+
+!python thesis/src/train_enhanced.py --config ../configs/improved_config.yaml --override model.name=RWKV --override model.num_layers=6 --override training.max_epochs=70 --override data.csv_folder=/kaggle/input/capnobase/capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=RWKV_update_d6_capno_experiment_kaggle_v3 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --cv-method k_fold --n-folds 5
+
+
+
+python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=WaveNet --override model.num_layers=4 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=WaveNet_d6_capno_experiment_v3 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --cv-method k_fold --n-folds 5
+
+
+
+
+python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=ImprovedTransformer --override model.num_layers=4 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=ImprovedTransformer_d6_capno_experiment_v6 --override model.dropout=0.6 --override preprocessing.normalization=robust  --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --cv-method k_fold --n-folds 5
+
+
+python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=ImprovedTransformer --override model.num_layers=2 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=ImprovedTransformer_d6_capno_experiment_v9 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --cv-method k_fold --n-folds 5
+
+
+
+
+python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=ImprovedTransformer --override model.num_layers=4 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=ImprovedTransformer_d6_capno_experiment_v10 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --override training.optimizer=adabelief --override training.adabelief_eps=1e-16 --cv-method k_fold --n-folds 5
+
+
+python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=ImprovedTransformer --override model.num_layers=4 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=ImprovedTransformer_d6_capno_experiment_v12 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --cv-method k_fold --n-folds 5
+
+
+python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=ImprovedTransformer --override model.num_layers=4 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=ImprovedTransformer_d6_capno_experiment_v13 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.8 --override preprocessing.bandpass_filter.low_freq=0.02 --cv-method k_fold --n-folds 5
+
+python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=ImprovedTransformer --override model.num_layers=4 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=ImprovedTransformer_d6_capno_experiment_v14 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --cv-method k_fold --n-folds 5
+
+
+python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=ImprovedTransformer --override model.num_layers=4 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=ImprovedTransformer_d6_capno_experiment_v15 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --cv-method k_fold --n-folds 5
+
+
+python train_enhanced.py --config ../configs/improved_config.yaml --override model.name=RWKV_DualBranch --override model.num_layers=3 --override training.max_epochs=70 --override data.csv_folder=capno --override  data.sampling_rate=300 --override data.segment_length=2400 --override preprocessing.downsample.target_rate=30 --override model.input_size=240 --override logging.experiment_name=RWKV_DualBranch_d6_capno_experiment_augment_v3 --override model.dropout=0.6 --override preprocessing.bandpass_filter.high_freq=0.6 --override preprocessing.bandpass_filter.low_freq=0.1 --cv-method k_fold --n-folds 5
