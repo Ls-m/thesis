@@ -268,7 +268,7 @@ def train_single_fold_enhanced(config: Dict, fold_data: Dict, fold_id: int,
     data_loaders = create_data_loaders(
         fold_data, 
         batch_size=config['training']['batch_size'],
-        num_workers=4
+        num_workers=16
     )
     
     print(f"Train samples: {len(data_loaders['train'].dataset)}")
