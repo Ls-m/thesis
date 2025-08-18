@@ -14,7 +14,53 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import random
+
+class SpecAugment(nn.Module):
+    """
+    Spectrogram augmentation module for frequency and time masking.
+
+    Args:
+        freq_mask_param (int): Maximum width of the frequency mask.
+        time_mask_param (int): Maximum width of the time mask.
+        num_freq_masks (int): Number of frequency masks to apply.
+        num_time_masks (int): Number of time masks to apply.
+    """
+    def __init__(self, freq_mask_param: int, time_mask_param: int, 
+                 num_freq_masks: int = 1, num_time_masks: int = 1):
+        super(SpecAugment, self).__init__()
+        self.freq_mask_param = freq_mask_param
+        self.time_mask_param = time_mask_param
+        self.num_freq_masks = num_freq_masks
+        self.num_time_masks = num_time_masks
+
+    def forward(self, spec: torch.Tensor) -> torch.Tensor:
+        """
+        Apply SpecAugment to a spectrogram.
+
+        Args:
+            spec (torch.Tensor): Input spectrogram of shape 
+                                 (Batch, Channels, Freq_bins, Time_steps).
+
+        Returns:
+            torch.Tensor: Augmented spectrogram.
+        """
+        augmented_spec = spec.clone()
+        _, _, num_freq_bins, num_time_steps = augmented_spec.shape
+
+        # Apply Frequency Masking
+        for _ in range(self.num_freq_masks):
+            f = random.randint(0, self.freq_mask_param)
+            f0 = random.randint(0, num_freq_bins - f)
+            augmented_spec[:, :, f0:f0 + f, :] = 0
+
+        # Apply Time Masking
+        for _ in range(self.num_time_masks):
+            t = random.randint(0, self.time_mask_param)
+            t0 = random.randint(0, num_time_steps - t)
+            augmented_spec[:, :, :, t0:t0 + t] = 0
+            
+        return augmented_spec
 
 class RWKVBlock(nn.Module):
     """RWKV block for time series processing."""
@@ -108,6 +154,13 @@ class RevisedRWKV_DualBranch(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+        # ✅ 1. Initialize the SpecAugment module
+        # These parameters are tunable. Start with small values.
+        # For example, mask up to 15 freq bins and 20 time steps.
+        self.spec_augment = SpecAugment(freq_mask_param=15, 
+                                        time_mask_param=20, 
+                                        num_freq_masks=2, 
+                                        num_time_masks=2)
         # Time domain input projection
         self.time_proj = nn.Sequential(
             nn.Conv1d(1, hidden_size // 2, kernel_size=7, padding=3),
@@ -165,10 +218,14 @@ class RevisedRWKV_DualBranch(nn.Module):
             time_x, state_time = rwkv_block(time_x, state_time)
         # Frequency domain branch with STFT
         x_squeeze = x.squeeze(1)  # (B, T)
-        x_stft = torch.stft(x_squeeze, n_fft=256, hop_length=64, win_length=256, window=torch.hann_window(256).to(x.device), return_complex=False)  # (B, F, Time_windows, 2)
-        mag = x_stft[..., 0]
-        phase = x_stft[..., 1]
+        x_stft_complex = torch.stft(x_squeeze, n_fft=256, hop_length=64, 
+                                    win_length=256, window=torch.hann_window(256).to(x.device), 
+                                    return_complex=True)
+        mag = x_stft_complex[..., 0]
+        phase = x_stft_complex[..., 1]
         freq_input = torch.stack([mag, phase], dim=1)  # (B, 2, F, Time_windows)
+        if self.training:
+            freq_input = self.spec_augment(freq_input)
         freq_x = self.freq_proj(freq_input)  # (B, hidden_size, F, Time_windows)
         # Treat as sequence: flatten F and Time_windows into seq dim
         freq_x = freq_x.flatten(2, 3)  # (B, hidden_size, F*Time_windows)
