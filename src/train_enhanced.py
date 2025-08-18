@@ -302,7 +302,7 @@ def train_single_fold_enhanced(config: Dict, fold_data: Dict, fold_id: int,
         log_every_n_steps=50,
         gradient_clip_val=gradient_clip_val,
         accumulate_grad_batches=1,
-        deterministic=True,
+        #deterministic=True,
         benchmark=False
     )
     
