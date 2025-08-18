@@ -221,9 +221,9 @@ class RevisedRWKV_DualBranch(nn.Module):
         x_stft_complex = torch.stft(x_squeeze, n_fft=256, hop_length=64, 
                                     win_length=256, window=torch.hann_window(256).to(x.device), 
                                     return_complex=True)
-        mag = x_stft_complex[..., 0]
-        phase = x_stft_complex[..., 1]
-        freq_input = torch.stack([mag, phase], dim=1)  # (B, 2, F, Time_windows)
+        real_part = x_stft_complex.real
+        imag_part = x_stft_complex.imag
+        freq_input = torch.stack([real_part, imag_part], dim=1)  # Shape: (B, 2, F, T)
         if self.training:
             freq_input = self.spec_augment(freq_input)
         freq_x = self.freq_proj(freq_input)  # (B, hidden_size, F, Time_windows)
