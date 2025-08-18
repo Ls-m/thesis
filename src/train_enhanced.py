@@ -321,7 +321,7 @@ def train_single_fold_enhanced(config: Dict, fold_data: Dict, fold_id: int,
         ckpt_path='best'
     )
     
-    sleep(120)  # Brief pause for system stability
+    sleep(180)  # Brief pause for system stability
     
     # Get predictions for ensemble
     model = PPGRespiratoryLightningModule.load_from_checkpoint(
