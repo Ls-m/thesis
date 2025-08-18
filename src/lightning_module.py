@@ -143,7 +143,7 @@ class PPGRespiratoryLightningModule(pl.LightningModule):
         
         # Log metrics for TensorBoard
         self.log('train_loss_epoch', avg_loss, prog_bar=False)
-        self.log('train_correlation', correlation, prog_bar=True)
+        self.log('train_correlation', correlation, prog_bar=False)
         self.log('train_mae', mae, prog_bar=False)
         
         # Clear outputs
@@ -190,8 +190,8 @@ class PPGRespiratoryLightningModule(pl.LightningModule):
         
         # Log metrics
         self.log('val_loss', avg_loss, prog_bar=True)
-        self.log('val_correlation', correlation, prog_bar=True)
-        self.log('val_mae', mae, prog_bar=True)
+        self.log('val_correlation', correlation, prog_bar=False)
+        self.log('val_mae', mae, prog_bar=False)
         
         # Clear outputs
         self.validation_step_outputs.clear()
