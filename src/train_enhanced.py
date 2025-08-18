@@ -294,6 +294,7 @@ def train_single_fold_enhanced(config: Dict, fold_data: Dict, fold_id: int,
     trainer = pl.Trainer(
         max_epochs=config['training']['max_epochs'],
         accelerator=config['hardware']['accelerator'],
+        strategy='ddp_find_unused_parameters_true',
         # devices=config['hardware']['devices'],
         precision=config['hardware']['precision'],
         callbacks=callbacks,
