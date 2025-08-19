@@ -16,15 +16,14 @@ import torch
 import torch.nn as nn
 import random
 
+import torch
+import torch.nn as nn
+import random
+
 class SpecAugment(nn.Module):
     """
     Spectrogram augmentation module for frequency and time masking.
-
-    Args:
-        freq_mask_param (int): Maximum width of the frequency mask.
-        time_mask_param (int): Maximum width of the time mask.
-        num_freq_masks (int): Number of frequency masks to apply.
-        num_time_masks (int): Number of time masks to apply.
+    This version is robust to inputs smaller than the mask parameters.
     """
     def __init__(self, freq_mask_param: int, time_mask_param: int, 
                  num_freq_masks: int = 1, num_time_masks: int = 1):
@@ -37,31 +36,32 @@ class SpecAugment(nn.Module):
     def forward(self, spec: torch.Tensor) -> torch.Tensor:
         """
         Apply SpecAugment to a spectrogram.
-
-        Args:
-            spec (torch.Tensor): Input spectrogram of shape 
-                                 (Batch, Channels, Freq_bins, Time_steps).
-
-        Returns:
-            torch.Tensor: Augmented spectrogram.
         """
         augmented_spec = spec.clone()
         _, _, num_freq_bins, num_time_steps = augmented_spec.shape
 
-        # Apply Frequency Masking
-        for _ in range(self.num_freq_masks):
-            f = random.randint(0, self.freq_mask_param)
-            f0 = random.randint(0, num_freq_bins - f)
-            augmented_spec[:, :, f0:f0 + f, :] = 0
+        # ✅ Apply Frequency Masking Safely
+        # Only apply if the dimension is larger than the smallest possible mask.
+        if self.freq_mask_param > 0 and num_freq_bins > self.freq_mask_param:
+            for _ in range(self.num_freq_masks):
+                # Choose a mask width that is no larger than the parameter OR the dimension itself
+                f = random.randint(0, self.freq_mask_param)
+                # Choose a valid starting point
+                f0 = random.randint(0, num_freq_bins - f)
+                augmented_spec[:, :, f0:f0 + f, :] = 0
 
-        # Apply Time Masking
-        for _ in range(self.num_time_masks):
-            t = random.randint(0, self.time_mask_param)
-            t0 = random.randint(0, num_time_steps - t)
-            augmented_spec[:, :, :, t0:t0 + t] = 0
+        # ✅ Apply Time Masking Safely
+        # Only apply if the dimension is larger than the smallest possible mask.
+        if self.time_mask_param > 0 and num_time_steps > self.time_mask_param:
+            for _ in range(self.num_time_masks):
+                # Choose a mask width that is no larger than the parameter OR the dimension itself
+                t = random.randint(0, self.time_mask_param)
+                # Choose a valid starting point
+                t0 = random.randint(0, num_time_steps - t)
+                augmented_spec[:, :, :, t0:t0 + t] = 0
             
         return augmented_spec
-
+    
 class RWKVBlock(nn.Module):
     """RWKV block for time series processing."""
     def __init__(self, d_model: int, d_ff: int = None, dropout: float = 0.1):
