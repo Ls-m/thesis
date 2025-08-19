@@ -45,8 +45,9 @@ class PPGRespiratoryLightningModule(pl.LightningModule):
         self.scheduler_name = config['training']['scheduler']
         
         # Loss function
-        self.criterion = nn.MSELoss()
-        
+        # self.criterion = nn.MSELoss()
+        self.criterion = nn.SmoothL1Loss(beta=0.01, reduction='mean')
+
         # Metrics storage for epoch-end calculations
         self.training_step_outputs = []
         self.validation_step_outputs = []
