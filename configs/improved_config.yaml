@@ -65,5 +65,5 @@ evaluation:
 # Hardware Configuration
 hardware:
   accelerator: "auto"  # auto, cpu, gpu
-  # devices: 1
+  devices: 1
   precision: 32

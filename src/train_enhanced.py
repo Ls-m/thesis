@@ -294,8 +294,8 @@ def train_single_fold_enhanced(config: Dict, fold_data: Dict, fold_id: int,
     trainer = pl.Trainer(
         max_epochs=config['training']['max_epochs'],
         accelerator=config['hardware']['accelerator'],
-        strategy='ddp_find_unused_parameters_true',
-        # devices=config['hardware']['devices'],
+        # strategy='ddp_find_unused_parameters_true',
+        devices=config['hardware']['devices'],
         precision=config['hardware']['precision'],
         callbacks=callbacks,
         logger=logger,
@@ -321,7 +321,7 @@ def train_single_fold_enhanced(config: Dict, fold_data: Dict, fold_id: int,
         ckpt_path='best'
     )
     
-    sleep(180)  # Brief pause for system stability
+    sleep(5)  # Brief pause for system stability
     
     # Get predictions for ensemble
     model = PPGRespiratoryLightningModule.load_from_checkpoint(
