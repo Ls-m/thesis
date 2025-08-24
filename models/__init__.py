@@ -1,7 +1,7 @@
 from .cnn1d import CNN1D, ResidualCNN1D
 from .lstm import LSTM, BiLSTM
 from .cnn_lstm import CNN_LSTM, AttentionCNN_LSTM
-from .rwkv import RWKV, ImprovedTransformer, WaveNet,RWKV_DualBranch
+from .rwkv import RWKV, ImprovedTransformer, WaveNet
 from .improved_rwkv import RevisedRWKV_DualBranch
 
 
@@ -18,7 +18,7 @@ def get_model(model_name: str, **kwargs):
         'RWKV': RWKV,
         'ImprovedTransformer': ImprovedTransformer,
         'WaveNet': WaveNet,
-        'RWKV_DualBranch': RWKV_DualBranch,
+        # 'RWKV_DualBranch': RWKV_DualBranch,
         'RevisedRWKV_DualBranch': RevisedRWKV_DualBranch
     }
     
@@ -31,5 +31,5 @@ def get_model(model_name: str, **kwargs):
 __all__ = [
     'CNN1D', 'ResidualCNN1D', 'LSTM', 'BiLSTM', 
     'CNN_LSTM', 'AttentionCNN_LSTM', 'RWKV', 
-    'ImprovedTransformer', 'WaveNet', 'RWKV_DualBranch', 'RevisedRWKV_DualBranch', 'get_model'
+    'ImprovedTransformer', 'WaveNet', 'RevisedRWKV_DualBranch', 'get_model'
 ]
