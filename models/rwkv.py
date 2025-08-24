@@ -804,7 +804,7 @@ class RWKV_Block(nn.Module):
 
 
 class RWKV(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, dropout, patch_size=16, stride=8):
+    def __init__(self, input_size, hidden_size, num_layers, dropout, patch_size=60, stride=30):
         super().__init__()
         self.patch_size = patch_size
         self.stride = stride
