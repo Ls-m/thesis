@@ -804,7 +804,7 @@ class RWKV_Block(nn.Module):
 
 
 class RWKV(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, dropout, patch_size=60, stride=30):
+    def __init__(self, input_size, hidden_size, num_layers, dropout, patch_size=90, stride=45):
         super().__init__()
         self.patch_size = patch_size
         self.stride = stride
@@ -814,7 +814,6 @@ class RWKV(nn.Module):
         self.blocks = nn.ModuleList([RWKV_Block(hidden_size) for _ in range(num_layers)])
         self.ln_out = nn.LayerNorm(hidden_size)
         self.head = nn.Linear(hidden_size, self.patch_size)  # Per-patch reconstruction
-        self.merge_conv = nn.Conv1d(1, 1, kernel_size=patch_size, stride=stride, padding=0)
 
     def forward(self, x, state=None):
         B, T, C = x.shape
@@ -837,7 +836,13 @@ class RWKV(nn.Module):
         h = self.ln_out(h)
         out = self.head(h)  # (B, num_patches, patch_size)
 
-        # Learnable merge
-        out = out.transpose(1, 2).reshape(B, 1, num_patches * self.patch_size)  # (B, 1, ~360)
-        reconstructed = self.merge_conv(out)[:, :, :time_dim]  # (B, 1, 240)
-        return reconstructed.transpose(1, 2)  # (B, 1, 240)
+        # Reconstruct with overlap averaging
+        reconstructed = torch.zeros(B, time_dim, device=x.device)
+        count = torch.zeros(B, time_dim, device=x.device)
+        for i in range(num_patches):
+            start = i * self.stride
+            end = start + self.patch_size
+            reconstructed[:, start:end] += out[:, i, :]
+            count[:, start:end] += 1
+        reconstructed /= (count + 1e-8)
+        return reconstructed.unsqueeze(1)  # (B, 1, time_dim=240)
