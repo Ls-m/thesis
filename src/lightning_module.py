@@ -45,8 +45,8 @@ class PPGRespiratoryLightningModule(pl.LightningModule):
         self.scheduler_name = config['training']['scheduler']
         
         # Loss function
-        # self.criterion = nn.MSELoss()
-        self.criterion = nn.SmoothL1Loss(beta=0.01, reduction='mean')
+        self.criterion = nn.MSELoss()
+        # self.criterion = nn.SmoothL1Loss(beta=0.01, reduction='mean')
 
         # Metrics storage for epoch-end calculations
         self.training_step_outputs = []
@@ -179,7 +179,7 @@ class PPGRespiratoryLightningModule(pl.LightningModule):
         # Flatten for correlation calculation
         preds_flat = all_preds.flatten().numpy()
         targets_flat = all_targets.flatten().numpy()
-        
+
         # Calculate correlation
         if len(preds_flat) > 1 and np.std(preds_flat) > 0 and np.std(targets_flat) > 0:
             correlation, _ = pearsonr(preds_flat, targets_flat)
