@@ -808,21 +808,41 @@ class RWKV(nn.Module):
         super().__init__()
         self.patch_size = patch_size
         self.stride = stride
-        self.embedding = nn.Linear(input_size * patch_size, hidden_size)  # Project patches to hidden dim
-        self.norm = nn.InstanceNorm1d(input_size, affine=True)  # Per-instance norm
+        self.input_size = input_size
+        self.norm = nn.InstanceNorm1d(1, affine=True)  # Univariate norm over time dim
+        self.embedding = nn.Linear(self.patch_size, hidden_size)
         self.blocks = nn.ModuleList([RWKV_Block(hidden_size) for _ in range(num_layers)])
         self.ln_out = nn.LayerNorm(hidden_size)
-        self.head = nn.Linear(hidden_size, 240)
+        self.head = nn.Linear(hidden_size, self.patch_size)  # Per-patch reconstruction
 
     def forward(self, x, state=None):
-        """
-        x: (batch, seq_len, input_size)
-        """
-        
+        B, T, C = x.shape
+        if C == 1:
+            time_dim = T
+            x = self.norm(x.transpose(1, 2)).transpose(1, 2)
+        else:
+            time_dim = C
+            x = self.norm(x)
+
+        x = x.unfold(-1, self.patch_size, self.stride)  # (B, T or channels, num_patches, patch_size)
+        num_patches = x.shape[-2]
+        x = x.reshape(B, num_patches, self.patch_size)  # (B, num_patches, patch_size)
+
         h = self.embedding(x)
         new_states = []
         for i, block in enumerate(self.blocks):
             h, st = block(h, state[i] if state else None)
             new_states.append(st)
         h = self.ln_out(h)
-        return self.head(h)
+        out = self.head(h)  # (B, num_patches, patch_size)
+
+        # Reconstruct with overlap averaging
+        reconstructed = torch.zeros(B, time_dim, device=x.device)
+        count = torch.zeros(B, time_dim, device=x.device)
+        for i in range(num_patches):
+            start = i * self.stride
+            end = start + self.patch_size
+            reconstructed[:, start:end] += out[:, i, :]
+            count[:, start:end] += 1
+        reconstructed /= (count + 1e-8)
+        return reconstructed.unsqueeze(1)  # (B, 1, time_dim=240)
